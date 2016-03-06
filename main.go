@@ -161,7 +161,7 @@ func runner() {
 				run.Unlock()
 			}
 			win.Fprintf("body", "$\n")
-			win.Fprintf("addr", "0/\\[error\\]")
+			win.Fprintf("addr", "#0")
 			win.Ctl("dot=addr")
 			win.Ctl("show")
 			win.Ctl("clean")
