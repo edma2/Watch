@@ -6,7 +6,7 @@
 //
 // Usage:
 //
-//	Watch pattern cmd [args...]
+//	Watch [-only pattern] cmd [args...]
 //
 // Watch opens a new acme window named for the current directory
 // with a suffix of /+watch. The window shows the execution of the given
@@ -20,7 +20,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"regexp"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -31,9 +31,10 @@ import (
 var args []string
 var win *acme.Win
 var needrun = make(chan bool, 1)
+var pattern = flag.String("only", "*", "only files that match shell pattern")
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: Watch pattern cmd args...\n")
+	fmt.Fprintf(os.Stderr, "usage: Watch [-only pattern] cmd args...\n")
 	os.Exit(2)
 }
 
@@ -41,11 +42,9 @@ func main() {
 	flag.Usage = usage
 	flag.Parse()
 	args = flag.Args()
-	if len(args) <= 1 {
+	if len(args) == 0 {
 		usage()
 	}
-	pattern := args[0]
-	args = args[1:]
 
 	var err error
 	win, err = acme.New()
@@ -69,8 +68,8 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		if event.Name != "" && event.Op == "put" {
-			matched, err := regexp.MatchString(pattern, event.Name)
+		if event.Name != "" && event.Op == "put" && strings.HasPrefix(event.Name, pwd) {
+			matched, err := filepath.Match(*pattern, filepath.Base(event.Name))
 			if err != nil {
 				log.Println(err)
 			} else if matched {
