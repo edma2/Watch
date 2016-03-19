@@ -12,6 +12,8 @@
 // with a suffix of /+watch. The window shows the execution of the given
 // command. Each time a file in that directory changes, Watch reexecutes
 // the command and updates the window.
+//
+// TODO: dump state
 package main
 
 import (
