@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -31,7 +32,7 @@ import (
 var args []string
 var win *acme.Win
 var needrun = make(chan bool, 1)
-var pattern = flag.String("only", "*", "only files that match shell pattern")
+var pattern = flag.String("only", ".*", "only files that match shell pattern")
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "usage: Watch [-only pattern] cmd args...\n")
@@ -45,6 +46,7 @@ func main() {
 	if len(args) == 0 {
 		usage()
 	}
+	re := regexp.MustCompile(*pattern)
 
 	var err error
 	win, err = acme.New()
@@ -68,18 +70,12 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		if event.Name != "" && event.Op == "put" && strings.HasPrefix(event.Name, pwd) {
-			matched, err := filepath.Match(*pattern, filepath.Base(event.Name))
-			if err != nil {
-				log.Println(err)
-			} else if matched {
-				select {
-				case needrun <- true:
-				default:
-				}
-
-				time.Sleep(100 * time.Millisecond)
+		if event.Name != "" && event.Op == "put" && strings.HasPrefix(event.Name, pwd) && re.MatchString(filepath.Base(event.Name)) {
+			select {
+			case needrun <- true:
+			default:
 			}
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 }
