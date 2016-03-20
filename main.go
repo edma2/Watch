@@ -34,7 +34,7 @@ import (
 var args []string
 var win *acme.Win
 var needrun = make(chan bool, 1)
-var pattern = flag.String("only", ".*", "only files that match shell pattern")
+var pattern = flag.String("only", ".*", "only files that match regular expression")
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "usage: Watch [-only pattern] cmd args...\n")
