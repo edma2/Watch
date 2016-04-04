@@ -35,6 +35,7 @@ var args []string
 var win *acme.Win
 var needrun = make(chan bool, 1)
 var pattern = flag.String("only", ".*", "only files that match regular expression")
+var term = flag.Bool("t", false, "output stdout/stderr to terminal instead of an acme window")
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "usage: Watch [-only pattern] cmd args...\n")
@@ -49,24 +50,28 @@ func main() {
 		usage()
 	}
 	re := regexp.MustCompile(*pattern)
+	pwd, _ := os.Getwd()
+	needrun <- true
 
 	var err error
-	win, err = acme.New()
-	if err != nil {
-		log.Fatal(err)
+	if *term {
+		go termRunner()
+	} else {
+		win, err = acme.New()
+		if err != nil {
+			log.Fatal(err)
+		}
+		win.Name(pwd + "/+watch")
+		win.Ctl("clean")
+		win.Fprintf("tag", "Get ")
+		go events()
+		go runner()
 	}
+
 	l, err := acme.Log()
 	if err != nil {
 		log.Fatal(err)
 	}
-	pwd, _ := os.Getwd()
-	win.Name(pwd + "/+watch")
-	win.Ctl("clean")
-	win.Fprintf("tag", "Get ")
-	needrun <- true
-	go events()
-	go runner()
-
 	for {
 		event, err := l.Read()
 		if err != nil {
@@ -105,6 +110,26 @@ func events() {
 var run struct {
 	sync.Mutex
 	id int
+}
+
+func termRunner() {
+	var lastcmd *exec.Cmd
+	for _ = range needrun {
+		if lastcmd != nil {
+			lastcmd.Process.Kill()
+		}
+		lastcmd = nil
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Start(); err != nil {
+			continue
+		}
+		lastcmd = cmd
+		go func() {
+			_ = cmd.Wait()
+		}()
+	}
 }
 
 func runner() {
