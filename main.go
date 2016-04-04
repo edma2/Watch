@@ -22,7 +22,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -33,7 +32,7 @@ import (
 
 var args []string
 var win *acme.Win
-var needrun = make(chan bool, 1)
+var needrun = make(chan *acme.LogEvent, 1)
 var pattern = flag.String("only", ".*", "only files that match regular expression")
 var term = flag.Bool("t", false, "output stdout/stderr to terminal instead of an acme window")
 
@@ -51,7 +50,7 @@ func main() {
 	}
 	re := regexp.MustCompile(*pattern)
 	pwd, _ := os.Getwd()
-	needrun <- true
+	needrun <- nil
 
 	var err error
 	if *term {
@@ -77,9 +76,9 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		if event.Name != "" && event.Op == "put" && strings.HasPrefix(event.Name, pwd) && re.MatchString(filepath.Base(event.Name)) {
+		if event.Name != "" && event.Op == "put" && strings.HasPrefix(event.Name, pwd) && re.MatchString(event.Name) {
 			select {
-			case needrun <- true:
+			case needrun <- &event:
 			default:
 			}
 			time.Sleep(100 * time.Millisecond)
@@ -93,7 +92,7 @@ func events() {
 		case 'x', 'X': // execute
 			if string(e.Text) == "Get" {
 				select {
-				case needrun <- true:
+				case needrun <- nil:
 				default:
 				}
 				continue
@@ -112,9 +111,31 @@ var run struct {
 	id int
 }
 
+func envOf(event *acme.LogEvent) []string {
+	env := os.Environ()
+	if event == nil {
+		var filtered []string
+		for _, v := range os.Environ() {
+			vv := strings.Split(v, "=")
+			switch vv[0] {
+			case "samfile", "%", "winid":
+				continue
+			default:
+				filtered = append(filtered, v)
+			}
+		}
+		return filtered
+	}
+	return append(
+		env,
+		"samfile="+event.Name,
+		"%="+event.Name,
+		fmt.Sprintf("winid=%d", event.ID))
+}
+
 func termRunner() {
 	var lastcmd *exec.Cmd
-	for _ = range needrun {
+	for event := range needrun {
 		if lastcmd != nil {
 			lastcmd.Process.Kill()
 		}
@@ -122,6 +143,7 @@ func termRunner() {
 		cmd := exec.Command(args[0], args[1:]...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+		cmd.Env = envOf(event)
 		if err := cmd.Start(); err != nil {
 			continue
 		}
@@ -134,7 +156,7 @@ func termRunner() {
 
 func runner() {
 	var lastcmd *exec.Cmd
-	for _ = range needrun {
+	for event := range needrun {
 		run.Lock()
 		run.id++
 		id := run.id
@@ -154,6 +176,7 @@ func runner() {
 		win.Fprintf("body", "$ %s\n", strings.Join(args, " "))
 		cmd.Stdout = w
 		cmd.Stderr = w
+		cmd.Env = envOf(event)
 		if err := cmd.Start(); err != nil {
 			r.Close()
 			w.Close()
