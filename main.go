@@ -112,22 +112,21 @@ var run struct {
 }
 
 func envOf(event *acme.LogEvent) []string {
-	env := os.Environ()
-	if event == nil {
-		var filtered []string
-		for _, v := range os.Environ() {
-			vv := strings.Split(v, "=")
-			switch vv[0] {
-			case "samfile", "%", "winid":
-				continue
-			default:
-				filtered = append(filtered, v)
-			}
+	var filtered []string
+	for _, v := range os.Environ() {
+		vv := strings.Split(v, "=")
+		switch vv[0] {
+		case "samfile", "%", "winid":
+			continue
+		default:
+			filtered = append(filtered, v)
 		}
+	}
+	if event == nil {
 		return filtered
 	}
 	return append(
-		env,
+		filtered,
 		"samfile="+event.Name,
 		"%="+event.Name,
 		fmt.Sprintf("winid=%d", event.ID))
